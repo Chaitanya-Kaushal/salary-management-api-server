@@ -45,4 +45,20 @@ describe('POST /auth/login', () => {
 
     expect(res.status).toBe(401);
   });
+
+  it('rate-limits to 5 login attempts then returns 429', async () => {
+    const app = await setupAppWithHrUser('hr@corp.example', 'password');
+
+    for (let i = 0; i < 5; i++) {
+      await request(app)
+        .post('/auth/login')
+        .send({ email: 'hr@corp.example', password: 'wrong' });
+    }
+
+    const res = await request(app)
+      .post('/auth/login')
+      .send({ email: 'hr@corp.example', password: 'wrong' });
+
+    expect(res.status).toBe(429);
+  });
 });
