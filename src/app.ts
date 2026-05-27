@@ -23,7 +23,7 @@ export function createApp(deps: AppDependencies = {}): Express {
     res.json({ status: 'ok' });
   });
 
-  app.use('/auth', createAuthRouter(authService));
+  app.use('/auth', createAuthRouter(authService, hrUserRepository));
 
   app.use(errorHandler);
 

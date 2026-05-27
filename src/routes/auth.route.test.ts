@@ -61,6 +61,14 @@ describe('POST /auth/login', () => {
   });
 });
 
+function extractAuthCookie(setCookie: string | string[] | undefined): string {
+  if (!setCookie) throw new Error('expected set-cookie header');
+  const cookies = Array.isArray(setCookie) ? setCookie : [setCookie];
+  const auth = cookies.find((c) => c.startsWith('auth='));
+  if (!auth) throw new Error('expected auth cookie');
+  return auth.split(';')[0] as string;
+}
+
 describe('GET /auth/me', () => {
   it('returns the current user when a valid cookie is sent', async () => {
     const app = await setupAppWithHrUser('hr@corp.example', 'password');
@@ -68,10 +76,9 @@ describe('GET /auth/me', () => {
     const loginRes = await request(app)
       .post('/auth/login')
       .send({ email: 'hr@corp.example', password: 'password' });
-    const setCookie = loginRes.headers['set-cookie'];
-    const cookies = Array.isArray(setCookie) ? setCookie : [setCookie as unknown as string];
+    const authCookie = extractAuthCookie(loginRes.headers['set-cookie']);
 
-    const res = await request(app).get('/auth/me').set('Cookie', cookies);
+    const res = await request(app).get('/auth/me').set('Cookie', authCookie);
 
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({ email: 'hr@corp.example', name: 'HR Manager' });
