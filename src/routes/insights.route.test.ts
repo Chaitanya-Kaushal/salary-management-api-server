@@ -54,9 +54,15 @@ async function setupAppWithAuth(): Promise<AppCtx> {
 describe('GET /insights/summary', () => {
   it('returns total employees, total payroll, and top countries/job titles', async () => {
     const { app, authCookie, employeeRepository } = await setupAppWithAuth();
-    await employeeRepository.create(makeEmployee({ email: 'a@e.com', country: 'US', jobTitle: 'Engineer', salary: 10_000_000 }));
-    await employeeRepository.create(makeEmployee({ email: 'b@e.com', country: 'US', jobTitle: 'Manager', salary: 20_000_000 }));
-    await employeeRepository.create(makeEmployee({ email: 'c@e.com', country: 'IN', jobTitle: 'Engineer', salary: 5_000_000 }));
+    await employeeRepository.create(
+      makeEmployee({ email: 'a@e.com', country: 'US', jobTitle: 'Engineer', salary: 10_000_000 }),
+    );
+    await employeeRepository.create(
+      makeEmployee({ email: 'b@e.com', country: 'US', jobTitle: 'Manager', salary: 20_000_000 }),
+    );
+    await employeeRepository.create(
+      makeEmployee({ email: 'c@e.com', country: 'IN', jobTitle: 'Engineer', salary: 5_000_000 }),
+    );
 
     const res = await request(app).get('/insights/summary').set('Cookie', authCookie);
 
