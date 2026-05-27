@@ -12,9 +12,7 @@ function extractBearer(authHeader: string | undefined): string | null {
 
 export function isAuthenticated(hrUserRepository: HRUserRepository): RequestHandler {
   return asyncHandler(async (req, _res, next) => {
-    const cookieToken = req.cookies?.auth as string | undefined;
-    const headerToken = extractBearer(req.headers.authorization);
-    const token = cookieToken ?? headerToken;
+    const token = extractBearer(req.headers.authorization);
 
     if (!token) {
       throw new UnauthorizedError('Not signed in');
