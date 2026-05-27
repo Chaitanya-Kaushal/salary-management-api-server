@@ -1,28 +1,41 @@
 import express, { type Express } from 'express';
 import request from 'supertest';
 import { BadRequestError, NotFoundError, UnauthorizedError } from '../errors/index.js';
+import { asyncHandler } from '../utils/async-handler.util.js';
 import { errorHandler } from './error-handler.middleware.js';
 
 function buildTestApp(): Express {
   const app = express();
-  app.get('/bad-request', (_req, _res, next) => {
-    next(new BadRequestError('email is required'));
-  });
-  app.get('/not-found', (_req, _res, next) => {
-    next(new NotFoundError('employee not found'));
-  });
-  app.get('/unauthorized', (_req, _res, next) => {
-    next(new UnauthorizedError('not signed in'));
-  });
-  app.get('/unknown', (_req, _res, next) => {
-    next(new Error('boom'));
-  });
+  app.get(
+    '/bad-request',
+    asyncHandler(async () => {
+      throw new BadRequestError('email is required');
+    }),
+  );
+  app.get(
+    '/not-found',
+    asyncHandler(async () => {
+      throw new NotFoundError('employee not found');
+    }),
+  );
+  app.get(
+    '/unauthorized',
+    asyncHandler(async () => {
+      throw new UnauthorizedError('not signed in');
+    }),
+  );
+  app.get(
+    '/unknown',
+    asyncHandler(async () => {
+      throw new Error('boom');
+    }),
+  );
   app.use(errorHandler);
   return app;
 }
 
 describe('error handler middleware', () => {
-  it('returns 400 JSON for BadRequestError', async () => {
+  it('returns 400 JSON for BadRequestError thrown inside asyncHandler', async () => {
     const res = await request(buildTestApp()).get('/bad-request');
     expect(res.status).toBe(400);
     expect(res.body).toEqual({ errors: [{ message: 'email is required' }] });
