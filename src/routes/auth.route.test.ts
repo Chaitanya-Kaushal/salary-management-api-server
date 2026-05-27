@@ -60,3 +60,42 @@ describe('POST /auth/login', () => {
     expect(res.status).toBe(429);
   });
 });
+
+describe('GET /auth/me', () => {
+  it('returns the current user when a valid cookie is sent', async () => {
+    const app = await setupAppWithHrUser('hr@corp.example', 'password');
+
+    const loginRes = await request(app)
+      .post('/auth/login')
+      .send({ email: 'hr@corp.example', password: 'password' });
+    const setCookie = loginRes.headers['set-cookie'];
+    const cookies = Array.isArray(setCookie) ? setCookie : [setCookie as unknown as string];
+
+    const res = await request(app).get('/auth/me').set('Cookie', cookies);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ email: 'hr@corp.example', name: 'HR Manager' });
+  });
+
+  it('returns 401 without a cookie', async () => {
+    const app = await setupAppWithHrUser('hr@corp.example', 'password');
+
+    const res = await request(app).get('/auth/me');
+
+    expect(res.status).toBe(401);
+  });
+});
+
+describe('POST /auth/logout', () => {
+  it('clears the auth cookie', async () => {
+    const app = await setupAppWithHrUser('hr@corp.example', 'password');
+
+    const res = await request(app).post('/auth/logout');
+
+    expect(res.status).toBe(204);
+    const setCookie = res.headers['set-cookie'];
+    expect(setCookie).toBeDefined();
+    const cookies = Array.isArray(setCookie) ? setCookie : [setCookie as unknown as string];
+    expect(cookies.some((c) => c.startsWith('auth=') && c.includes('Expires='))).toBe(true);
+  });
+});
