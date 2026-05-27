@@ -50,9 +50,7 @@ describe('POST /auth/login', () => {
     const app = await setupAppWithHrUser('hr@corp.example', 'password');
 
     for (let i = 0; i < 5; i++) {
-      await request(app)
-        .post('/auth/login')
-        .send({ email: 'hr@corp.example', password: 'wrong' });
+      await request(app).post('/auth/login').send({ email: 'hr@corp.example', password: 'wrong' });
     }
 
     const res = await request(app)
