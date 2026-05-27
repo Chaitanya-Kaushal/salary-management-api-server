@@ -1,0 +1,44 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model HRUser {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  name         String?
+  createdAt    DateTime @default(now())
+
+  @@map("hr_users")
+}
+
+model Employee {
+  id             String         @id @default(uuid())
+  fullName       String
+  email          String         @unique
+  jobTitle       String
+  department     String
+  country        String
+  currency       String
+  salary         Int
+  employmentType EmploymentType
+  hireDate       DateTime
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  @@index([country])
+  @@index([jobTitle, country])
+  @@index([department])
+  @@map("employees")
+}
+
+enum EmploymentType {
+  FULL_TIME
+  PART_TIME
+  CONTRACTOR
+}
