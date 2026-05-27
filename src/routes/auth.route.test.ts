@@ -24,4 +24,25 @@ describe('POST /auth/login', () => {
     const cookies = Array.isArray(setCookie) ? setCookie : [setCookie as unknown as string];
     expect(cookies.some((c) => c.startsWith('auth='))).toBe(true);
   });
+
+  it('returns 401 for an incorrect password', async () => {
+    const app = await setupAppWithHrUser('hr@corp.example', 'password');
+
+    const res = await request(app)
+      .post('/auth/login')
+      .send({ email: 'hr@corp.example', password: 'wrong' });
+
+    expect(res.status).toBe(401);
+    expect(res.body.errors[0].message).toMatch(/invalid email or password/i);
+  });
+
+  it('returns 401 when the user does not exist', async () => {
+    const app = await setupAppWithHrUser('hr@corp.example', 'password');
+
+    const res = await request(app)
+      .post('/auth/login')
+      .send({ email: 'nobody@corp.example', password: 'password' });
+
+    expect(res.status).toBe(401);
+  });
 });
