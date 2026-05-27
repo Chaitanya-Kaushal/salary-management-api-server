@@ -8,7 +8,7 @@ import type { EmployeeInput } from '../repositories/employee.repository.js';
 
 type AppCtx = {
   app: Express;
-  authCookie: string;
+  authHeader: string;
   employeeRepository: InMemoryEmployeeRepository;
 };
 
@@ -56,20 +56,18 @@ async function setupAppWithAuth(): Promise<AppCtx> {
   const loginRes = await request(app)
     .post('/auth/login')
     .send({ email: 'hr@corp.example', password: 'password' });
-  const setCookie = loginRes.headers['set-cookie'];
-  const cookies = Array.isArray(setCookie) ? setCookie : [setCookie as unknown as string];
-  const auth = cookies.find((c) => c.startsWith('auth='));
-  if (!auth) throw new Error('expected auth cookie from login');
-  const authCookie = auth.split(';')[0] as string;
+  const token = loginRes.body.token as string;
+  if (!token) throw new Error('expected token from login');
+  const authHeader = `Bearer ${token}`;
 
-  return { app, authCookie, employeeRepository };
+  return { app, authHeader, employeeRepository };
 }
 
 describe('GET /employees', () => {
   it('returns an empty page when no employees exist', async () => {
-    const { app, authCookie } = await setupAppWithAuth();
+    const { app, authHeader } = await setupAppWithAuth();
 
-    const res = await request(app).get('/employees').set('Cookie', authCookie);
+    const res = await request(app).get('/employees').set('Authorization', authHeader);
 
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ data: [], total: 0, page: 1, pageSize: 10 });
@@ -84,7 +82,7 @@ describe('GET /employees', () => {
   });
 
   it('returns seeded employees', async () => {
-    const { app, authCookie, employeeRepository } = await setupAppWithAuth();
+    const { app, authHeader, employeeRepository } = await setupAppWithAuth();
     await employeeRepository.create(sampleInput);
     await employeeRepository.create({
       ...sampleInput,
@@ -92,7 +90,7 @@ describe('GET /employees', () => {
       fullName: 'Bob Brown',
     });
 
-    const res = await request(app).get('/employees').set('Cookie', authCookie);
+    const res = await request(app).get('/employees').set('Authorization', authHeader);
 
     expect(res.status).toBe(200);
     expect(res.body.total).toBe(2);
@@ -100,7 +98,7 @@ describe('GET /employees', () => {
   });
 
   it('filters by search across name and email', async () => {
-    const { app, authCookie, employeeRepository } = await setupAppWithAuth();
+    const { app, authHeader, employeeRepository } = await setupAppWithAuth();
     await employeeRepository.create(sampleInput);
     await employeeRepository.create({
       ...sampleInput,
@@ -111,14 +109,14 @@ describe('GET /employees', () => {
     const res = await request(app)
       .get('/employees')
       .query({ search: 'alice' })
-      .set('Cookie', authCookie);
+      .set('Authorization', authHeader);
 
     expect(res.body.total).toBe(1);
     expect(res.body.data[0].fullName).toBe('Alice Anderson');
   });
 
   it('filters by country', async () => {
-    const { app, authCookie, employeeRepository } = await setupAppWithAuth();
+    const { app, authHeader, employeeRepository } = await setupAppWithAuth();
     await employeeRepository.create(sampleInput);
     await employeeRepository.create({
       ...sampleInput,
@@ -129,14 +127,14 @@ describe('GET /employees', () => {
     const res = await request(app)
       .get('/employees')
       .query({ country: 'IN' })
-      .set('Cookie', authCookie);
+      .set('Authorization', authHeader);
 
     expect(res.body.total).toBe(1);
     expect(res.body.data[0].country).toBe('IN');
   });
 
   it('paginates results', async () => {
-    const { app, authCookie, employeeRepository } = await setupAppWithAuth();
+    const { app, authHeader, employeeRepository } = await setupAppWithAuth();
     for (let i = 0; i < 12; i++) {
       await employeeRepository.create({ ...sampleInput, email: `e${i}@example.com` });
     }
@@ -144,11 +142,11 @@ describe('GET /employees', () => {
     const page1 = await request(app)
       .get('/employees')
       .query({ page: 1, pageSize: 5 })
-      .set('Cookie', authCookie);
+      .set('Authorization', authHeader);
     const page3 = await request(app)
       .get('/employees')
       .query({ page: 3, pageSize: 5 })
-      .set('Cookie', authCookie);
+      .set('Authorization', authHeader);
 
     expect(page1.body.total).toBe(12);
     expect(page1.body.data).toHaveLength(5);
@@ -158,9 +156,12 @@ describe('GET /employees', () => {
 
 describe('POST /employees', () => {
   it('creates an employee and returns 201 with the row', async () => {
-    const { app, authCookie } = await setupAppWithAuth();
+    const { app, authHeader } = await setupAppWithAuth();
 
-    const res = await request(app).post('/employees').set('Cookie', authCookie).send(sampleBody());
+    const res = await request(app)
+      .post('/employees')
+      .set('Authorization', authHeader)
+      .send(sampleBody());
 
     expect(res.status).toBe(201);
     expect(res.body).toMatchObject({
@@ -172,11 +173,11 @@ describe('POST /employees', () => {
   });
 
   it('returns 400 when full name is missing', async () => {
-    const { app, authCookie } = await setupAppWithAuth();
+    const { app, authHeader } = await setupAppWithAuth();
 
     const res = await request(app)
       .post('/employees')
-      .set('Cookie', authCookie)
+      .set('Authorization', authHeader)
       .send(sampleBody({ fullName: '' }));
 
     expect(res.status).toBe(400);
@@ -193,19 +194,21 @@ describe('POST /employees', () => {
 
 describe('GET /employees/:id', () => {
   it('returns the employee', async () => {
-    const { app, authCookie, employeeRepository } = await setupAppWithAuth();
+    const { app, authHeader, employeeRepository } = await setupAppWithAuth();
     const created = await employeeRepository.create(sampleInput);
 
-    const res = await request(app).get(`/employees/${created.id}`).set('Cookie', authCookie);
+    const res = await request(app).get(`/employees/${created.id}`).set('Authorization', authHeader);
 
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({ id: created.id, fullName: 'Alice Anderson' });
   });
 
   it('returns 404 for unknown id', async () => {
-    const { app, authCookie } = await setupAppWithAuth();
+    const { app, authHeader } = await setupAppWithAuth();
 
-    const res = await request(app).get('/employees/does-not-exist').set('Cookie', authCookie);
+    const res = await request(app)
+      .get('/employees/does-not-exist')
+      .set('Authorization', authHeader);
 
     expect(res.status).toBe(404);
   });
@@ -213,12 +216,12 @@ describe('GET /employees/:id', () => {
 
 describe('PUT /employees/:id', () => {
   it('updates the employee', async () => {
-    const { app, authCookie, employeeRepository } = await setupAppWithAuth();
+    const { app, authHeader, employeeRepository } = await setupAppWithAuth();
     const created = await employeeRepository.create(sampleInput);
 
     const res = await request(app)
       .put(`/employees/${created.id}`)
-      .set('Cookie', authCookie)
+      .set('Authorization', authHeader)
       .send(sampleBody({ jobTitle: 'Senior Engineer' }));
 
     expect(res.status).toBe(200);
@@ -226,11 +229,11 @@ describe('PUT /employees/:id', () => {
   });
 
   it('returns 404 for unknown id', async () => {
-    const { app, authCookie } = await setupAppWithAuth();
+    const { app, authHeader } = await setupAppWithAuth();
 
     const res = await request(app)
       .put('/employees/missing')
-      .set('Cookie', authCookie)
+      .set('Authorization', authHeader)
       .send(sampleBody());
 
     expect(res.status).toBe(404);
@@ -239,19 +242,21 @@ describe('PUT /employees/:id', () => {
 
 describe('DELETE /employees/:id', () => {
   it('deletes the employee and returns 204', async () => {
-    const { app, authCookie, employeeRepository } = await setupAppWithAuth();
+    const { app, authHeader, employeeRepository } = await setupAppWithAuth();
     const created = await employeeRepository.create(sampleInput);
 
-    const res = await request(app).delete(`/employees/${created.id}`).set('Cookie', authCookie);
+    const res = await request(app)
+      .delete(`/employees/${created.id}`)
+      .set('Authorization', authHeader);
 
     expect(res.status).toBe(204);
     expect(await employeeRepository.findById(created.id)).toBeNull();
   });
 
   it('returns 404 when deleting unknown id', async () => {
-    const { app, authCookie } = await setupAppWithAuth();
+    const { app, authHeader } = await setupAppWithAuth();
 
-    const res = await request(app).delete('/employees/missing').set('Cookie', authCookie);
+    const res = await request(app).delete('/employees/missing').set('Authorization', authHeader);
 
     expect(res.status).toBe(404);
   });

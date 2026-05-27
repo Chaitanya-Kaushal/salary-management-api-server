@@ -11,18 +11,18 @@ async function setupAppWithHrUser(email: string, password: string) {
 }
 
 describe('POST /auth/login', () => {
-  it('returns 204 and sets an auth cookie for valid credentials', async () => {
+  it('returns 200 with a token and user for valid credentials', async () => {
     const app = await setupAppWithHrUser('hr@corp.example', 'password');
 
     const res = await request(app)
       .post('/auth/login')
       .send({ email: 'hr@corp.example', password: 'password' });
 
-    expect(res.status).toBe(204);
-    const setCookie = res.headers['set-cookie'];
-    expect(setCookie).toBeDefined();
-    const cookies = Array.isArray(setCookie) ? setCookie : [setCookie as unknown as string];
-    expect(cookies.some((c) => c.startsWith('auth='))).toBe(true);
+    expect(res.status).toBe(200);
+    expect(typeof res.body.token).toBe('string');
+    expect(res.body.token.length).toBeGreaterThan(10);
+    expect(res.body.user).toMatchObject({ email: 'hr@corp.example', name: 'HR Manager' });
+    expect(res.body.user.id).toBeDefined();
   });
 
   it('returns 401 for an incorrect password', async () => {
@@ -61,48 +61,44 @@ describe('POST /auth/login', () => {
   });
 });
 
-function extractAuthCookie(setCookie: string | string[] | undefined): string {
-  if (!setCookie) throw new Error('expected set-cookie header');
-  const cookies = Array.isArray(setCookie) ? setCookie : [setCookie];
-  const auth = cookies.find((c) => c.startsWith('auth='));
-  if (!auth) throw new Error('expected auth cookie');
-  return auth.split(';')[0] as string;
-}
-
 describe('GET /auth/me', () => {
-  it('returns the current user when a valid cookie is sent', async () => {
+  it('returns the current user when a valid bearer token is sent', async () => {
     const app = await setupAppWithHrUser('hr@corp.example', 'password');
 
     const loginRes = await request(app)
       .post('/auth/login')
       .send({ email: 'hr@corp.example', password: 'password' });
-    const authCookie = extractAuthCookie(loginRes.headers['set-cookie']);
+    const token = loginRes.body.token as string;
 
-    const res = await request(app).get('/auth/me').set('Cookie', authCookie);
+    const res = await request(app).get('/auth/me').set('Authorization', `Bearer ${token}`);
 
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({ email: 'hr@corp.example', name: 'HR Manager' });
   });
 
-  it('returns 401 without a cookie', async () => {
+  it('returns 401 without a bearer token', async () => {
     const app = await setupAppWithHrUser('hr@corp.example', 'password');
 
     const res = await request(app).get('/auth/me');
 
     expect(res.status).toBe(401);
   });
+
+  it('returns 401 for an invalid token', async () => {
+    const app = await setupAppWithHrUser('hr@corp.example', 'password');
+
+    const res = await request(app).get('/auth/me').set('Authorization', 'Bearer not-a-real-token');
+
+    expect(res.status).toBe(401);
+  });
 });
 
 describe('POST /auth/logout', () => {
-  it('clears the auth cookie', async () => {
+  it('returns 204 (client clears its own token)', async () => {
     const app = await setupAppWithHrUser('hr@corp.example', 'password');
 
     const res = await request(app).post('/auth/logout');
 
     expect(res.status).toBe(204);
-    const setCookie = res.headers['set-cookie'];
-    expect(setCookie).toBeDefined();
-    const cookies = Array.isArray(setCookie) ? setCookie : [setCookie as unknown as string];
-    expect(cookies.some((c) => c.startsWith('auth=') && c.includes('Expires='))).toBe(true);
   });
 });
