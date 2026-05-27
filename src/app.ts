@@ -1,4 +1,3 @@
-import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import express, { type Express } from 'express';
 import helmet from 'helmet';
@@ -52,7 +51,6 @@ export function createApp(deps: AppDependencies = {}): Express {
     }),
   );
   app.use(express.json());
-  app.use(cookieParser());
 
   app.get('/health', (_req, res) => {
     res.json({ status: 'ok' });

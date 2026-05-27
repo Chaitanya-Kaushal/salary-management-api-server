@@ -8,7 +8,7 @@ import type { EmployeeInput } from '../repositories/employee.repository.js';
 
 type AppCtx = {
   app: Express;
-  authCookie: string;
+  authHeader: string;
   employeeRepository: InMemoryEmployeeRepository;
 };
 
@@ -42,18 +42,16 @@ async function setupAppWithAuth(): Promise<AppCtx> {
   const loginRes = await request(app)
     .post('/auth/login')
     .send({ email: 'hr@corp.example', password: 'password' });
-  const setCookie = loginRes.headers['set-cookie'];
-  const cookies = Array.isArray(setCookie) ? setCookie : [setCookie as unknown as string];
-  const auth = cookies.find((c) => c.startsWith('auth='));
-  if (!auth) throw new Error('expected auth cookie from login');
-  const authCookie = auth.split(';')[0] as string;
+  const token = loginRes.body.token as string;
+  if (!token) throw new Error('expected token from login');
+  const authHeader = `Bearer ${token}`;
 
-  return { app, authCookie, employeeRepository };
+  return { app, authHeader, employeeRepository };
 }
 
 describe('GET /insights/summary', () => {
   it('returns total employees, total payroll, and top countries/job titles', async () => {
-    const { app, authCookie, employeeRepository } = await setupAppWithAuth();
+    const { app, authHeader, employeeRepository } = await setupAppWithAuth();
     await employeeRepository.create(
       makeEmployee({ email: 'a@e.com', country: 'US', jobTitle: 'Engineer', salary: 10_000_000 }),
     );
@@ -64,7 +62,7 @@ describe('GET /insights/summary', () => {
       makeEmployee({ email: 'c@e.com', country: 'IN', jobTitle: 'Engineer', salary: 5_000_000 }),
     );
 
-    const res = await request(app).get('/insights/summary').set('Cookie', authCookie);
+    const res = await request(app).get('/insights/summary').set('Authorization', authHeader);
 
     expect(res.status).toBe(200);
     expect(res.body.totalEmployees).toBe(3);
@@ -82,7 +80,7 @@ describe('GET /insights/summary', () => {
 
 describe('GET /insights/by-country', () => {
   it('returns min/max/avg/median per country with currency and bands', async () => {
-    const { app, authCookie, employeeRepository } = await setupAppWithAuth();
+    const { app, authHeader, employeeRepository } = await setupAppWithAuth();
     await employeeRepository.create(
       makeEmployee({ email: 'a@e.com', country: 'US', currency: 'USD', salary: 10_000_000 }),
     );
@@ -93,7 +91,7 @@ describe('GET /insights/by-country', () => {
       makeEmployee({ email: 'c@e.com', country: 'IN', currency: 'INR', salary: 5_000_000 }),
     );
 
-    const res = await request(app).get('/insights/by-country').set('Cookie', authCookie);
+    const res = await request(app).get('/insights/by-country').set('Authorization', authHeader);
 
     expect(res.status).toBe(200);
     const usRow = res.body.find((r: { country: string }) => r.country === 'US');
@@ -110,7 +108,7 @@ describe('GET /insights/by-country', () => {
 
 describe('GET /insights/by-job-title', () => {
   it('returns avg per job title, optionally scoped by country', async () => {
-    const { app, authCookie, employeeRepository } = await setupAppWithAuth();
+    const { app, authHeader, employeeRepository } = await setupAppWithAuth();
     await employeeRepository.create(
       makeEmployee({ email: 'a@e.com', jobTitle: 'Engineer', country: 'US', salary: 10_000_000 }),
     );
@@ -121,7 +119,7 @@ describe('GET /insights/by-job-title', () => {
       makeEmployee({ email: 'c@e.com', jobTitle: 'Engineer', country: 'IN', salary: 5_000_000 }),
     );
 
-    const all = await request(app).get('/insights/by-job-title').set('Cookie', authCookie);
+    const all = await request(app).get('/insights/by-job-title').set('Authorization', authHeader);
     expect(all.status).toBe(200);
     const engineerAll = all.body.find((r: { jobTitle: string }) => r.jobTitle === 'Engineer');
     expect(engineerAll).toMatchObject({ count: 2, avg: 7_500_000 });
@@ -129,7 +127,7 @@ describe('GET /insights/by-job-title', () => {
     const us = await request(app)
       .get('/insights/by-job-title')
       .query({ country: 'US' })
-      .set('Cookie', authCookie);
+      .set('Authorization', authHeader);
     const engineerUs = us.body.find((r: { jobTitle: string }) => r.jobTitle === 'Engineer');
     expect(engineerUs).toMatchObject({ count: 1, avg: 10_000_000 });
   });
@@ -137,12 +135,12 @@ describe('GET /insights/by-job-title', () => {
 
 describe('GET /insights/by-department', () => {
   it('returns headcount per department', async () => {
-    const { app, authCookie, employeeRepository } = await setupAppWithAuth();
+    const { app, authHeader, employeeRepository } = await setupAppWithAuth();
     await employeeRepository.create(makeEmployee({ email: 'a@e.com', department: 'Engineering' }));
     await employeeRepository.create(makeEmployee({ email: 'b@e.com', department: 'Engineering' }));
     await employeeRepository.create(makeEmployee({ email: 'c@e.com', department: 'Sales' }));
 
-    const res = await request(app).get('/insights/by-department').set('Cookie', authCookie);
+    const res = await request(app).get('/insights/by-department').set('Authorization', authHeader);
 
     expect(res.status).toBe(200);
     expect(res.body).toContainEqual({ department: 'Engineering', count: 2 });
@@ -152,7 +150,7 @@ describe('GET /insights/by-department', () => {
 
 describe('GET /insights/by-employment-type', () => {
   it('returns headcount per employment type', async () => {
-    const { app, authCookie, employeeRepository } = await setupAppWithAuth();
+    const { app, authHeader, employeeRepository } = await setupAppWithAuth();
     await employeeRepository.create(
       makeEmployee({ email: 'a@e.com', employmentType: 'FULL_TIME' }),
     );
@@ -163,7 +161,9 @@ describe('GET /insights/by-employment-type', () => {
       makeEmployee({ email: 'c@e.com', employmentType: 'CONTRACTOR' }),
     );
 
-    const res = await request(app).get('/insights/by-employment-type').set('Cookie', authCookie);
+    const res = await request(app)
+      .get('/insights/by-employment-type')
+      .set('Authorization', authHeader);
 
     expect(res.status).toBe(200);
     expect(res.body).toContainEqual({ employmentType: 'FULL_TIME', count: 2 });
